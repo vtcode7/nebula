@@ -1,58 +1,77 @@
 {
   "entities": {
-    "Game": {
-      "title": "Sessão de Jogo",
-      "description": "Representa uma sessão de jogo de conquista de território.",
+    "Player": {
+      "title": "Jogador",
+      "description": "Informações do jogador na partida.",
       "type": "object",
       "properties": {
-        "grid": {
-          "type": "array",
-          "description": "Grade 2D de proprietários (0, 1, 2)"
-        },
-        "player1": {
-          "type": "object",
-          "properties": {
-            "uid": { "type": "string" },
-            "score": { "type": "number" },
-            "name": { "type": "string" }
-          }
-        },
-        "player2": {
-          "type": "object",
-          "properties": {
-            "uid": { "type": "string" },
-            "score": { "type": "number" },
-            "name": { "type": "string" }
-          }
-        },
-        "turn": {
-          "type": "string",
-          "description": "UID do jogador atual"
-        },
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "elixir": { "type": "number" },
+        "lastElixirUpdate": { "type": "number" }
+      },
+      "required": ["uid", "name", "elixir", "lastElixirUpdate"]
+    },
+    "Deployment": {
+      "title": "Implantação",
+      "description": "Uma carta jogada na arena.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "owner": { "type": "number" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "type", "x", "y", "owner", "timestamp"]
+    },
+    "Tower": {
+      "title": "Torre",
+      "description": "Estado de uma torre na arena.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "hp": { "type": "number" },
+        "maxHp": { "type": "number" },
+        "owner": { "type": "number" },
+        "side": { "type": "string" }
+      },
+      "required": ["id", "type", "x", "y", "hp", "maxHp", "owner"]
+    },
+    "Game": {
+      "title": "Partida de Nebula Rumble",
+      "description": "Sessão de jogo estilo Clash Royale no espaço.",
+      "type": "object",
+      "properties": {
+        "player1": { "$ref": "Player" },
+        "player2": { "$ref": "Player" },
         "status": {
           "type": "string",
           "enum": ["waiting", "playing", "finished"]
         },
-        "lastMove": {
-          "type": "object",
-          "description": "Informações sobre o último movimento"
+        "deployments": {
+          "type": "array",
+          "items": { "$ref": "Deployment" }
         },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
+        "towers": {
+          "type": "array",
+          "items": { "$ref": "Tower" }
         },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "createdAt": { "type": "number" },
+        "winner": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["grid", "status", "createdAt", "updatedAt"]
+      "required": ["player1", "status", "deployments", "towers", "createdAt"]
     }
   },
   "firestore": {
     "games/{gameId}": {
       "schema": "Game",
-      "description": "Sessões de jogo individuais"
+      "description": "Arenas de batalha"
     }
   }
 }

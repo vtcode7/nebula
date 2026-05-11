@@ -12,21 +12,31 @@ service cloud.firestore {
     function incoming() { return request.resource.data; }
     function existing() { return resource.data; }
 
+    function isPlayer(game) {
+      return game.player1.uid == request.auth.uid || 
+             (game.player2 != null && game.player2.uid == request.auth.uid);
+    }
+
     // Validation Helpers
+    function isValidPlayer(p) {
+      return p.uid is string && p.name is string && p.elixir is number && p.lastElixirUpdate is number;
+    }
+
     function isValidGame(data) {
-      return data.grid is list &&
-             data.status in ['waiting', 'playing', 'finished'] &&
-             data.createdAt is timestamp &&
+      return data.status in ['waiting', 'playing', 'finished'] &&
+             data.createdAt is number &&
              data.updatedAt is timestamp &&
-             (data.player1 == null || (data.player1.uid is string && data.player1.score is number)) &&
-             (data.player2 == null || (data.player2.uid is string && data.player2.score is number));
+             isValidPlayer(data.player1) &&
+             (data.player2 == null || isValidPlayer(data.player2)) &&
+             data.deployments is list &&
+             data.towers is list;
     }
 
     match /games/{gameId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && (
         resource.data.player1.uid == request.auth.uid ||
-        resource.data.player2.uid == request.auth.uid ||
+        (resource.data.player2 != null && resource.data.player2.uid == request.auth.uid) ||
         resource.data.status == 'waiting'
       );
 
@@ -35,11 +45,9 @@ service cloud.firestore {
                     isValidGame(incoming()) &&
                     incoming().player1.uid == request.auth.uid &&
                     incoming().status == 'waiting' &&
-                    incoming().createdAt == request.time &&
                     incoming().updatedAt == request.time;
 
       allow update: if isSignedIn() &&
-                    isValidGame(incoming()) &&
                     (
                       // Action: Join Game
                       (
@@ -47,19 +55,25 @@ service cloud.firestore {
                         existing().player2 == null &&
                         incoming().player2.uid == request.auth.uid &&
                         incoming().status == 'playing' &&
-                        incoming().diff(existing()).affectedKeys().hasOnly(['player2', 'status', 'updatedAt', 'turn'])
+                        incoming().updatedAt == request.time &&
+                        incoming().diff(existing()).affectedKeys().hasOnly(['player2', 'status', 'updatedAt'])
                       ) ||
-                      // Action: Make Move
+                      // Action: Deploy Card
                       (
                         existing().status == 'playing' &&
-                        existing().turn == request.auth.uid &&
-                        (existing().player1.uid == request.auth.uid || existing().player2.uid == request.auth.uid) &&
-                        incoming().diff(existing()).affectedKeys().hasOnly(['grid', 'player1', 'player2', 'turn', 'status', 'updatedAt', 'lastMove'])
+                        isPlayer(existing()) &&
+                        incoming().diff(existing()).affectedKeys().hasOnly(['deployments'])
+                      ) ||
+                      // Action: Finish Game
+                      (
+                        existing().status == 'playing' &&
+                        isPlayer(existing()) &&
+                        incoming().status == 'finished' &&
+                        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'winner'])
                       )
-                    ) &&
-                    incoming().updatedAt == request.time;
+                    );
 
-      allow delete: if false; // Games should not be deleted by clients for now
+      allow delete: if false;
     }
 
     match /test/connection {

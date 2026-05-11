@@ -10,11 +10,12 @@ import {
   updateDoc, 
   onSnapshot, 
   getDoc, 
-  serverTimestamp
+  serverTimestamp,
+  arrayUnion
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { MultiplayerGame, Player, TileOwner } from '../types';
-import { initializeGrid, flattenGrid, expandGrid } from '../utils';
+import { MultiplayerGame, Player, Deployment, UnitType, ELIXIR_MAX } from '../types';
+import { initializeTowers } from '../utils';
 
 enum OperationType {
   CREATE = 'create',
@@ -25,28 +26,15 @@ enum OperationType {
   WRITE = 'write',
 }
 
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-  }
-}
-
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
+  const errInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
       userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
     },
     operationType,
     path
-  }
+  };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
@@ -57,17 +45,18 @@ export const createMultiplayerGame = async (playerName: string): Promise<string>
   const gameId = Math.random().toString(36).substring(2, 8).toUpperCase();
   const player1: Player = {
     uid: auth.currentUser.uid,
-    score: 0,
-    name: playerName || 'Jogador 1'
+    elixir: 5,
+    lastElixirUpdate: Date.now(),
+    name: playerName || 'Rei 1'
   };
 
-  const gameData = {
-    grid: flattenGrid(initializeGrid()),
+  const gameData: any = {
     player1,
     player2: null,
-    turn: auth.currentUser.uid,
     status: 'waiting',
-    createdAt: serverTimestamp(),
+    deployments: [],
+    towers: initializeTowers(),
+    createdAt: Date.now(),
     updatedAt: serverTimestamp(),
   };
 
@@ -86,16 +75,13 @@ export const joinMultiplayerGame = async (gameId: string, playerName: string): P
   const gameRef = doc(db, 'games', gameId);
   try {
     const gameSnap = await getDoc(gameRef);
-    if (!gameSnap.exists()) throw new Error('Jogo não encontrado');
+    if (!gameSnap.exists()) throw new Error('Arena não encontrada');
     
-    const gameData = gameSnap.data();
-    if (gameData.status !== 'waiting') throw new Error('O jogo já começou ou terminou');
-    if (gameData.player1.uid === auth.currentUser.uid) throw new Error('Você já está neste jogo');
-
     const player2: Player = {
       uid: auth.currentUser.uid,
-      score: 0,
-      name: playerName || 'Jogador 2'
+      elixir: 5,
+      lastElixirUpdate: Date.now(),
+      name: playerName || 'Rei 2'
     };
 
     await updateDoc(gameRef, {
@@ -108,34 +94,33 @@ export const joinMultiplayerGame = async (gameId: string, playerName: string): P
   }
 };
 
-export const updateGameMove = async (
-  gameId: string, 
-  newGrid: TileOwner[][], 
-  p1Score: number,
-  p2Score: number,
-  nextTurnUid: string | null,
-  lastMove: { x: number, y: number },
-  isGameOver: boolean = false
-) => {
+export const deployCard = async (gameId: string, type: UnitType, x: number, y: number, owner: 1 | 2) => {
+  const gameRef = doc(db, 'games', gameId);
+  const deployment: Deployment = {
+    id: Math.random().toString(36).substring(7),
+    type,
+    x,
+    y,
+    owner,
+    timestamp: Date.now()
+  };
+
+  try {
+    await updateDoc(gameRef, {
+      deployments: arrayUnion(deployment)
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `games/${gameId}`);
+  }
+};
+
+export const finishGame = async (gameId: string, winner: 1 | 2) => {
   const gameRef = doc(db, 'games', gameId);
   try {
-    const updatePayload: any = {
-      grid: flattenGrid(newGrid),
-      'player1.score': p1Score,
-      'player2.score': p2Score,
-      updatedAt: serverTimestamp(),
-      lastMove
-    };
-
-    if (nextTurnUid) {
-      updatePayload.turn = nextTurnUid;
-    }
-    
-    if (isGameOver) {
-      updatePayload.status = 'finished';
-    }
-
-    await updateDoc(gameRef, updatePayload);
+    await updateDoc(gameRef, {
+      status: 'finished',
+      winner
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `games/${gameId}`);
   }
@@ -144,13 +129,7 @@ export const updateGameMove = async (
 export const subscribeToGame = (gameId: string, onUpdate: (game: MultiplayerGame) => void) => {
   return onSnapshot(doc(db, 'games', gameId), (doc) => {
     if (doc.exists()) {
-      const data = doc.data();
-      const game: MultiplayerGame = {
-        ...data,
-        id: doc.id,
-        grid: expandGrid(data.grid)
-      } as MultiplayerGame;
-      onUpdate(game);
+      onUpdate({ id: doc.id, ...doc.data() } as MultiplayerGame);
     }
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, `games/${gameId}`);
