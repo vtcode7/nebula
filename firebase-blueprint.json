@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "Game": {
+      "title": "Sessão de Jogo",
+      "description": "Representa uma sessão de jogo de conquista de território.",
+      "type": "object",
+      "properties": {
+        "grid": {
+          "type": "array",
+          "description": "Grade 2D de proprietários (0, 1, 2)"
+        },
+        "player1": {
+          "type": "object",
+          "properties": {
+            "uid": { "type": "string" },
+            "score": { "type": "number" },
+            "name": { "type": "string" }
+          }
+        },
+        "player2": {
+          "type": "object",
+          "properties": {
+            "uid": { "type": "string" },
+            "score": { "type": "number" },
+            "name": { "type": "string" }
+          }
+        },
+        "turn": {
+          "type": "string",
+          "description": "UID do jogador atual"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["waiting", "playing", "finished"]
+        },
+        "lastMove": {
+          "type": "object",
+          "description": "Informações sobre o último movimento"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["grid", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "games/{gameId}": {
+      "schema": "Game",
+      "description": "Sessões de jogo individuais"
+    }
+  }
+}
